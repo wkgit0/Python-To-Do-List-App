@@ -1,0 +1,202 @@
+import tkinter as tk
+from tkinter import ttk, messagebox
+from ttkthemes import ThemedTk
+from tkcalendar import DateEntry
+from datetime import datetime
+import json
+import os
+
+tasks = []
+is_dark_mode = False  # Global toggle
+
+# Function to save tasks to a file
+def save_tasks():
+    data = []
+    for text, due, checkbox in tasks:
+        data.append({
+            "text": text,
+            "due": due,
+            "completed": checkbox.var.get()
+        })
+    with open("tasks.json", "w") as f:
+        json.dump(data, f, indent=4)
+
+# Function to load tasks from the file
+def load_tasks():
+    if os.path.exists("tasks.json"):
+        with open("tasks.json", "r") as f:
+            try:
+                data = json.load(f)
+                for item in data:
+                    task_var = tk.BooleanVar(value=item["completed"])
+                    task_label = f"{item['text']} (Due: {item['due']})" if item['due'] else item['text']
+                    checkbox = tk.Checkbutton(frame_tasks, text=task_label, variable=task_var, font=("Arial", 12),
+                                              bg="#FFF8DC", anchor='w', width=40, pady=2, relief="flat")
+                    checkbox.var = task_var
+                    checkbox.pack(anchor='w', padx=10, pady=5)
+                    tasks.append((item["text"], item["due"], checkbox))
+            except json.JSONDecodeError:
+                pass
+
+# Function to check if the task already exists
+def is_task_duplicate(task_text):
+    return any(task_text.lower() == task[0].lower() for task in tasks)
+
+# Function to apply the selected theme (cute & sweet)
+def apply_theme():
+    bg = "#FDE2FF" if is_dark_mode else "#FFF8E1"  # Soft pastel pink for dark mode, pastel yellow for light mode
+    fg = "#D1A7E0" if is_dark_mode else "#FFB6C1"  # Light purple for dark mode, soft pink for light mode
+    task_bg = "#FFB3D9" if is_dark_mode else "#FFECB3"  # Pastel pink for dark mode, pastel yellow for light mode
+    button_bg = "#F8A5C2"  # Sweet pink for buttons
+    button_fg = "#FFFFFF"  # White text on buttons
+
+    app.configure(bg=bg)
+    label_title.config(bg=bg, fg=fg, font=("Comic Sans MS", 24, "bold"))
+    entry_task.config(bg=task_bg, fg=fg, insertbackground=fg, font=("Comic Sans MS", 12), relief="flat", bd=2)
+    frame_buttons.config(bg=bg)
+    frame_deadline.config(bg=bg)
+    label_status.config(bg=bg, fg=fg)
+    canvas.config(bg=task_bg)
+    frame_tasks.config(bg=task_bg)
+    
+    # Update button styles
+    btn_add.config(bg=button_bg, fg=button_fg, relief="raised", font=("Comic Sans MS", 12, "bold"), borderwidth=3)
+    btn_delete.config(bg=button_bg, fg=button_fg, relief="raised", font=("Comic Sans MS", 12, "bold"), borderwidth=3)
+    btn_deadline.config(bg=button_bg, fg=button_fg, relief="raised", font=("Comic Sans MS", 12, "bold"), borderwidth=3)
+    btn_toggle_dark.config(bg="#C1D3FE" if not is_dark_mode else "#3A4E97", fg="white", relief="raised", font=("Comic Sans MS", 12), borderwidth=3)
+
+    for _, _, checkbox in tasks:
+        checkbox.config(bg=task_bg, fg=fg, selectcolor=task_bg, font=("Comic Sans MS", 12))
+
+    # If no tasks, show a "no tasks" message
+    if not tasks:
+        label_no_tasks = tk.Label(frame_tasks, text="No tasks available", font=("Comic Sans MS", 12), fg="gray", bg=task_bg)
+        label_no_tasks.pack(pady=10)
+
+# Function to toggle dark mode
+def toggle_dark_mode():
+    global is_dark_mode
+    is_dark_mode = not is_dark_mode
+    apply_theme()
+
+# Function to open the date picker for deadlines
+def open_date_picker():
+    def select_date():
+        deadline.set(cal.get_date().strftime("%d %b %Y"))
+        popup.destroy()
+
+    popup = tk.Toplevel(app)
+    popup.title("Select Deadline")
+    popup.geometry("250x200")
+    popup.configure(bg="#FFF8E1")
+
+    cal = DateEntry(popup, width=12, background='lightblue', foreground='black', borderwidth=2, date_pattern='dd/mm/yyyy')
+    cal.pack(pady=20)
+
+    tk.Button(popup, text="Set Deadline", command=select_date, bg="#FFB6C1", fg="white", font=("Comic Sans MS", 12)).pack()
+
+# Function to add a task
+def add_task():
+    task_text = entry_task.get()
+    due_date = deadline.get()
+    
+    if not task_text:
+        animate_status("Enter a task!", "red")
+        return
+    
+    # Check if task already exists
+    if is_task_duplicate(task_text):
+        messagebox.showwarning("Duplicate Task", "This task is already added. Please choose a different task.")
+        return
+
+    task_var = tk.BooleanVar()
+    task_label = f"{task_text} (Due: {due_date})" if due_date else task_text
+    checkbox = tk.Checkbutton(frame_tasks, text=task_label, variable=task_var, font=("Comic Sans MS", 12),
+                              bg="#FFECB3", anchor='w', width=40, pady=2, relief="flat")
+    checkbox.var = task_var
+    checkbox.pack(anchor='w', padx=10, pady=5)
+    tasks.append((task_text, due_date, checkbox))
+    
+    entry_task.delete(0, tk.END)
+    deadline.set("")
+    save_tasks()
+    animate_status("Task added!", "green")
+
+# Function to delete selected tasks and show message when no tasks are left
+def delete_task():
+    if not tasks:
+        messagebox.showinfo("No Tasks", "There are no tasks to delete.")
+        return
+    
+    for task in tasks[:]:
+        _, _, checkbox = task
+        if checkbox.var.get():
+            checkbox.destroy()
+            tasks.remove(task)
+    save_tasks()
+    animate_status("Selected tasks deleted.", "orange")
+    
+# Function to animate status messages
+def animate_status(message, color):
+    label_status.config(text=message, fg=color)
+    label_status.place(x=100, y=390)
+    label_status.after(2000, lambda: label_status.config(text=""))
+
+# GUI setup
+app = ThemedTk(theme="arc")
+app.title("🎯 To-Do List with Deadlines")
+app.geometry("460x470")
+app.resizable(False, False)
+app.configure(bg="#FFF8E1")
+
+# Title Label
+label_title = tk.Label(app, text="My To-Do List", font=("Comic Sans MS", 24, "bold"))
+label_title.pack(pady=10)
+
+# Task entry box
+entry_task = tk.Entry(app, font=("Comic Sans MS", 14), width=28)
+entry_task.pack(pady=5)
+
+# Deadline picker
+frame_deadline = tk.Frame(app, bg="#FFF8E1")
+frame_deadline.pack()
+
+deadline = tk.StringVar()
+btn_deadline = tk.Button(frame_deadline, text="Pick Deadline 📅", command=open_date_picker, bg="#FFB6C1", fg="white")
+btn_deadline.grid(row=0, column=0, padx=5)
+tk.Label(frame_deadline, textvariable=deadline, font=("Comic Sans MS", 12), bg="#FFF8E1", fg="black").grid(row=0, column=1)
+
+# Buttons to add/delete tasks and toggle dark mode
+frame_buttons = tk.Frame(app, bg="#FFF8E1")
+frame_buttons.pack(pady=5)
+
+btn_add = tk.Button(frame_buttons, text="Add Task", command=add_task, bg="#F8A5C2", fg="white", relief="raised", font=("Comic Sans MS", 12, "bold"), borderwidth=3)
+btn_add.grid(row=0, column=0, padx=5)
+
+btn_delete = tk.Button(frame_buttons, text="Delete Task(s)", command=delete_task, bg="#F8A5C2", fg="white", relief="raised", font=("Comic Sans MS", 12, "bold"), borderwidth=3)
+btn_delete.grid(row=0, column=1, padx=5)
+
+btn_toggle_dark = tk.Button(app, text="Toggle Dark Mode 🌙", command=toggle_dark_mode, bg="#C1D3FE", fg="white", relief="raised", font=("Comic Sans MS", 12), borderwidth=3)
+btn_toggle_dark.pack(pady=5)
+
+# Task display area with scrollbar
+canvas = tk.Canvas(app, height=220, bg="#FFECB3", highlightthickness=0)
+scrollbar = tk.Scrollbar(app, orient="vertical", command=canvas.yview)
+frame_tasks = tk.Frame(canvas, bg="#FFECB3")
+
+frame_tasks.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+canvas.create_window((0, 0), window=frame_tasks, anchor='nw')
+canvas.configure(yscrollcommand=scrollbar.set)
+
+canvas.pack(fill="both", expand=True, side="left", padx=10, pady=10)
+scrollbar.pack(side="right", fill="y")
+
+# Status label
+label_status = tk.Label(app, font=("Comic Sans MS", 12), bg="#FFF8E1")
+
+# Apply initial theme and load tasks
+apply_theme()
+load_tasks()
+
+# Start the app
+app.mainloop()
